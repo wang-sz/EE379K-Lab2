@@ -1,0 +1,11 @@
+Path to current directory:
+/var/www/html/hackable/uploads
+
+Contents of current directory:
+. .. dvwa_email.png injection.php
+
+Contents of root:
+. .. .dockerenv bin boot dev etc home lib lib64 main.sh media mnt opt proc root run sbin srv sys tmp usr var
+
+Number of processes running:
+17 
