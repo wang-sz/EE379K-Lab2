@@ -1,0 +1,56 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{minted}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\author{Student: Sean Wang, szw87 \\ Professor: Mohit Tiwari, Antonio Espinoza \\ Department of Electrical \& Computer Engineering \\ The University of Texas at Austin}
+\date{\today}
+\title{EE379K Enterprise Network Security Lab 2 Report}
+\hypersetup{
+ pdfauthor={Student: Sean Wang, szw87 \\ Professor: Mohit Tiwari, Antonio Espinoza \\ Department of Electrical \& Computer Engineering \\ The University of Texas at Austin},
+ pdftitle={EE379K Enterprise Network Security Lab 2 Report},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={},
+ pdflang={English}}
+
+\begin{document}
+
+\maketitle
+\section*{Part 1 - Vulnerable Web-Apps}
+\subsection*{Setting up a web-service in a container}
+The Damn Vulnerable Web App in Docker was setup on low difficulty by following the guide~\cite{dvwa}. Then, a
+PHP file (\verb|part1/injection.php|) was uploaded to the web app, and could then be loaded and executed when navigated to. This PHP script
+prints the path to the current directory, the contents of the current directory, the contents fo the root, and the number of processes
+running in the system. The output of the script onto the webpage is shown below:
+\begin{minted}{bash}
+  Path to current directory:
+  /var/www/html/hackable/uploads
+  
+  Contents of current directory:
+  . .. dvwa_email.png injection.php
+  
+  Contents of root:
+  . .. .dockerenv bin boot dev etc home lib lib64 main.sh
+  media mnt opt proc root run sbin srv sys tmp usr var
+  
+  Number of processes running:
+  17
+\end{minted}
+
+The server's view of the filesystem has a few differences from running \verb|ls /| from the VM's terminal. For example, it shows files
+that are normally hidden, such as \verb|.|, \verb|..|, and \verb|.dockerenv|. The things it doesn't show that \verb|ls /| shows
+include \verb|cdrom/|, \verb|initrd.img|, \verb|initrd.img.old|, \verb|lib32/|, \verb|libx32/|, \verb|lost+found/|, \verb|snap/|,
+\verb|swapfile|, \verb|vmlinuz|, \verb|vmlinuz.old|. Additionally, running \begin{verbatim}ps aux --no-headers | wc -l\end{verbatim}
+from the VM's terminal resulted in 223 instead of 17. This difference is due to how Docker creates and manages containers. Docker
+utilizes the Linux kernel's cgroups and namespaces in order to manage and monitor resource allocation, and utilizes the C library,
+\verb|runC|, that gives each container its own root file system, similar to a \verb|chroot jail|~\cite{codementor,demystify}. As such, the root
+of the filesystem seen by the Docker container and the VM are not the same filesystem, explaining the difference in output of \verb|ls /|.
+Additionally, through the use of namespaces, Docker has isolated the processes inside the container from the processes of the VM running
+Docker.
+
+\bibliography{bibliography}
+\bibliographystyle{ieeetr}
+\end{document}
