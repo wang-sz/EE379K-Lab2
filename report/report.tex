@@ -39,6 +39,7 @@ running in the system. The output of the script onto the webpage is shown below:
   Number of processes running:
   17
 \end{minted}
+
 The server's view of the filesystem has a few differences from running \verb|ls /| from the VM's terminal. For example, it shows files
 that are normally hidden, such as \verb|.|, \verb|..|, and \verb|.dockerenv|. The files and directories it doesn't show that
 \verb|ls /| shows include \verb|cdrom/|, \verb|initrd.img|, \verb|initrd.img.old|, \verb|lib32/|, \verb|libx32/|, \verb|lost+found/|,
@@ -49,6 +50,93 @@ that gives each container its own root file system, similar to a \verb|chroot ja
 the filesystem seen by the Docker container and the VM are not the same filesystem, explaining the difference in output of \verb|ls /|.
 Additionally, through the use of namespaces, Docker has isolated the processes inside the container from the processes of the VM
 running Docker.
+
+On the Content Security Policy Bypass (CSP Bypass) page, there is a textbox that allows external scripts from certain allowed sites
+to be run. In order to execute Javascript that creates a popup alert, a simple line of Javascript was inserted into a pastebin:
+\begin{minted}{javascript}
+  alert("this is a popup window");
+\end{minted}
+Then, by inserting the pastebin link to the raw text, \verb|https://pastebin.com/raw/wENwXfBR|, and pressing the include button, a popup
+was generated, like in Figure~\ref{fig:CSP}.
+\begin{figure}[!h]
+  \centering
+  \includegraphics[width=.71\linewidth]{./csp_popup.png}
+  \caption{\label{fig:CSP}
+  Javascript popup from CSP vulnerability}
+\end{figure}
+
+On the SQL Injection tab, there were several steps needed to get the right information to access all the login credentials. First,
+\begin{verbatim}
+  %' OR '1'='1
+\end{verbatim}
+was entered to check if this would return all records that are false and all that are true, as well. The results are shown in
+Figure~\ref{fig:SQL-1}, confirming that we can use the the previous input as a prefix to other inputs that query the rest of the
+information. For example, the next input was
+\begin{verbatim}
+  %' AND 1=1 UNION SELECT null, table_name FROM
+    INFORMATION_SCHEMA.tables #
+\end{verbatim}
+which returned information about all the other databases the server maintains, as shown in Figure~\ref{fig:SQL-2}. Next, changing the
+input to
+\begin{verbatim}
+  %' and 1=1 UNION SELECT null, table_name FROM
+    INFORMATION_SCHEMA.tables WHERE table_name LIKE 'user%' #
+\end{verbatim}
+returned and confirmed the table name needed to find login credentials, \verb|users|, shown in Figure~\ref{fig:SQL-3}. To get the
+credentials, the input was changed to
+\begin{verbatim}
+  %' and 1=1 UNION SELECT null,
+    concat(0x0a,user,0x0a,password) from users #
+\end{verbatim}
+The results of this are shown in Figure~\ref{fig:SQL-4} and include the username and hashed password at the bottom of each entry.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\linewidth]{./SQL-1.png}
+  \caption{\label{fig:SQL-1}
+  First SQL injection to check sanitization}
+\end{figure}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\linewidth]{./SQL-2.png}
+  \caption{\label{fig:SQL-2}
+  Result of query for table names (not all results shown)}
+\end{figure}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\linewidth]{./SQL-3.png}
+  \caption{\label{fig:SQL-3}
+  Result of query for table names similar to 'user'}
+\end{figure}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\linewidth]{./SQL-4.png}
+  \caption{\label{fig:SQL-4}
+  Result of query for user credentials}
+\end{figure}\\
+Using a website~\cite{md5} to decrypt the hashes, the login credentials of every user can be determined, as shown in Table~\ref{table:creds}.
+\begin{table}[h]
+  \centering
+  \begin{tabular}{ |c|c|c|c|c|c| }
+    \hline
+    \textbf{USER:} & admin    & gordonb & 1337    & pablo   & smithy   \\ \hline
+    \textbf{PASS:} & password & abc123  & charley & letmein & password \\ \hline
+  \end{tabular}
+  \caption{\label{table:creds}
+  Table of credentials}
+\end{table}
+Since the input wasn't being sanitized, SQL queries could be submitted through the input box and then executed, returning all kinds
+of information from the database. The queries at the beginning were to test what was valid and figure out the internal SQL query
+that was being performed by the web app. Then, the table names could be queried using the \verb|INFORMATION_SCHEMA| table to find
+the table name that was most likely to have user credentials. Once the right table is found, it becomes fairly simple to get the
+hashed passwords and then decrypt it using a tool. The end result is the exposure of all these users' credentials.
+
+Containerizing the web app limits what the attack can see and modify since the server is isolated from the actual host machine. This
+is shown in the PHP injection where the results of \verb|ls /| and \verb=ps aux --no-headers | wc -l= are different when run from
+the PHP script on the server and from the terminal of the VM hosting the container. However, containerizing doesn't prevent the
+server itself from the kinds of attacks performed by bypassing the Content Security Policy and SQL injections. In other words,
+the machine hosting the container is protected from attacks coming from inside the container, but the inside of the container is
+still vulnerable.
+\subsection*{strace}
 
 \bibliography{bibliography}
 \bibliographystyle{ieeetr}
