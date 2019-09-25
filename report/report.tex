@@ -20,7 +20,8 @@
 
 \maketitle
 \section*{Part 1 - Vulnerable Web-Apps}
-\subsection*{Setting up a web-service in a container}
+\subsection*{1a - Containers}
+\subsubsection*{PHP Injection}
 The Damn Vulnerable Web App in Docker was setup on low difficulty by following the guide~\cite{dvwa}. Then, a
 PHP file (\verb|part1/injection.php|) was uploaded to the web app, and could then be loaded and executed when navigated to. This PHP script
 prints the path to the current directory, the contents of the current directory, the contents fo the root, and the number of processes
@@ -39,7 +40,6 @@ running in the system. The output of the script onto the webpage is shown below:
   Number of processes running:
   17
 \end{minted}
-
 The server's view of the filesystem has a few differences from running \verb|ls /| from the VM's terminal. For example, it shows files
 that are normally hidden, such as \verb|.|, \verb|..|, and \verb|.dockerenv|. The files and directories it doesn't show that
 \verb|ls /| shows include \verb|cdrom/|, \verb|initrd.img|, \verb|initrd.img.old|, \verb|lib32/|, \verb|libx32/|, \verb|lost+found/|,
@@ -50,7 +50,7 @@ that gives each container its own root file system, similar to a \verb|chroot ja
 the filesystem seen by the Docker container and the VM are not the same filesystem, explaining the difference in output of \verb|ls /|.
 Additionally, through the use of namespaces, Docker has isolated the processes inside the container from the processes of the VM
 running Docker.
-
+\subsubsection*{Content Security Policy Bypass}
 On the Content Security Policy Bypass (CSP Bypass) page, there is a textbox that allows external scripts from certain allowed sites
 to be run. In order to execute Javascript that creates a popup alert, a simple line of Javascript was inserted into a pastebin:
 \begin{minted}{javascript}
@@ -64,7 +64,7 @@ was generated, like in Figure~\ref{fig:CSP}.
   \caption{\label{fig:CSP}
   Javascript popup from CSP vulnerability}
 \end{figure}
-
+\subsubsection*{SQL Injection}
 On the SQL Injection tab, there were several steps needed to get the right information to access all the login credentials. First,
 \begin{verbatim}
   %' OR '1'='1
@@ -136,7 +136,67 @@ the PHP script on the server and from the terminal of the VM hosting the contain
 server itself from the kinds of attacks performed by bypassing the Content Security Policy and SQL injections. In other words,
 the machine hosting the container is protected from attacks coming from inside the container, but the inside of the container is
 still vulnerable.
-\subsection*{strace}
+\subsection*{1b - strace}
+A method to detect exploits performed on DVWA is to use the tool \verb|strace|. It can attach to a process and log any system calls
+that process makes. To monitor any system calls made by DVWA, \verb|strace| needs to be attached to a process called
+\verb|containerd|. To get the PID of the process:
+\begin{minted}{bash}
+  $ ps -ef | grep containerd
+  root     700    1  0 10:39 ?     00:00:00 /usr/bin/containerd
+\end{minted}
+Then, to attach \verb|strace| to the \verb|containerd| process and all of its children and run DVWA:
+\begin{minted}{bash}
+  $ sudo strace -p 700 -o strace.txt -f
+  $ docker run --rm -it -p 80:80 vulnerables/web-dvwa
+\end{minted}
+Then, for example, the following command can be executed into the 'Command Injection' tab by closing off the \verb|ping| command with
+a semicolon:
+\begin{minted}{bash}
+  ; echo "malware" > /tmp/maliciousfile
+\end{minted}
+The log produced from \verb|strace| in \verb|part1/strace.txt| can then be searched for system calls that create and write to 
+that file:
+\begin{minted}{bash}
+  8545  execve("/bin/sh", ["sh", "-c", "ping  -c 4 ; echo
+        \"malware\" > /t"... ], 0x7ffd96384018 /* 9 vars */
+        <unfinished ... >
+  ...
+  8545  open("/tmp/maliciousfile",
+        O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3
+  8545  fcntl(1, F_DUPFD, 10)             = 10
+  8545  close(1)                          = 0
+  8545  fcntl(10, F_SETFD, FD_CLOEXEC)    = 0
+  8545  dup2(3, 1)                        = 1
+  8545  close(3)                          = 0
+  8545  write(1, "malware\n", 8)          = 8
+  8545  dup2(10, 1)                       = 1
+  8545  close(10)                         = 0
+  8545  exit_group(0)                     = ?
+  8545  +++ exited with 0 +++
+\end{minted}
+\subsection*{1c - Limiting network access with iptables}
+First, \verb|firewalld| is masked and stopped to prevent it from being started by other services and tells the system to use
+\verb|iptables|' rules. This is done using the following command:
+\begin{minted}{bash}
+  $ systemctl mask firewalld && systemctl stop firewalld
+\end{minted}
+Now the \verb|iptables| rules can be modified to only allow a single connection to the web server from \verb|10.157.90.8|.
+This can be done with the following:
+\begin{minted}{bash}
+  $ sudo iptables \
+      -A INPUT \          # append to chain INPUT
+      -p tcp \            # specify protocol
+      --dport 80 \        # specify port
+      ! -s 10.157.90.8 \  # for all BUT specified source
+      -j DROP             # DROP
+\end{minted}
+Now, any connections not from the specified IP are dropped. The new \verb|iptables| rules can be seen using:
+\begin{minted}{bash}
+  $ sudo iptables -S
+\end{minted}
+Alternatively, the output of \verb|iptables-save| can be saved into a file, which contains the rules as well, like in
+\verb|part1/iptables.txt|.
+\section*{Part 2 - SELinux}
 
 \bibliography{bibliography}
 \bibliographystyle{ieeetr}
