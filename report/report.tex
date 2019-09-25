@@ -56,7 +56,8 @@ to be run. In order to execute Javascript that creates a popup alert, a simple l
 \begin{minted}{javascript}
   alert("this is a popup window");
 \end{minted}
-Then, by inserting the pastebin link to the raw text, \verb|https://pastebin.com/raw/wENwXfBR|, and pressing the include button, a popup
+Then, by inserting the pastebin link to the raw text, \\
+\verb|https://pastebin.com/raw/wENwXfBR|, and pressing the include button, a popup
 was generated, like in Figure~\ref{fig:CSP}.
 \begin{figure}[!h]
   \centering
@@ -197,6 +198,34 @@ Now, any connections not from the specified IP are dropped. The new \verb|iptabl
 Alternatively, the output of \verb|iptables-save| can be saved into a file, which contains the rules as well, like in
 \verb|part1/iptables.txt|.
 \section*{Part 2 - SELinux}
+For this part, a simple policy module was created and the file contexts were then applied. Running the \verb|simple|
+executable will create a file, \verb|simple.txt|, and attempt to read from a file, \verb|secret.txt|. After
+compiling and loading the policy module and using \verb|restorecon| to apply the labels, the \verb|simple|
+executable now has the label \verb|simple_exec_t|. Then, after starting the \verb|simple.service| and looking
+at the logs, the following error can be seen when the program attempts to read \verb|secret.txt| in Figure~\ref{fig:logs}.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\linewidth]{./logs.png}
+  \caption{\label{fig:logs}
+  Error logs from attempting to read from secret.txt}
+\end{figure}
+Additionally, \verb|ls -Z| shows that the file \verb|simple.txt| has been created with the \verb|simple_var_t|
+type, shown in Figure~\label{fig:simple}.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\linewidth]{./simple.png}
+  \caption{\label{fig:simple}
+  Labels attached to simple.txt}
+\end{figure}
+The context file, \verb|simple.fc|, specifies what security contexts are applied when a policy is installed,
+including role, user, type, and level. This is how restrictions were applied to what the \verb|simple|
+executable could modify. On the other hand, the \verb|simple.te| file is a type enforcement file that defines
+certain types and what rules apply to those types. This then applies the rules and permissions associated with
+certain types to files of that type.
+\section*{Conclusion}
+This lab did not take an unreasonably long time, rather it took a reasonable amount of time. This was also
+a very interesting lab, especially part 1, involving finding vulnerabilities in DVWA. It also brought up
+important topics to think about regarding how to prevent these kinds of vulnerabilities.
 
 \bibliography{bibliography}
 \bibliographystyle{ieeetr}
