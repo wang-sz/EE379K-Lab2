@@ -1,0 +1,251 @@
+diff --git a/README.md b/README.md
+index 779dfcb..abb5930 100644
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,9 @@
++In order to transfer the running images into the Kubernetes registry, the following commands were used (similar to the simplePhpSQL example):
++  $ docker tag docker-vulnerable-dvwa_website:latest localhost:32000/docker-vulnerable-dvwa_website:k8s
++  $ docker push localhost:32000/docker-vulnerable-dvwa_website:k8s
++  $ docker apply -f mysql.yaml
++  $ docker apply -f webserver.yaml
++
+ # Damn Vulnerable Web Application Docker container
+ [![Docker Pulls](https://img.shields.io/docker/pulls/vulnerables/web-dvwa.svg?style=plastic)](https://hub.docker.com/r/vulnerables/web-dvwa/)
+ ![License](https://img.shields.io/badge/License-GPL-blue.svg?style=plastic)
+diff --git a/Dockerfile b/db/Dockerfile
+similarity index 79%
+rename from Dockerfile
+rename to db/Dockerfile
+index b04b9f7..f57f5c8 100644
+--- a/Dockerfile
++++ b/db/Dockerfile
+@@ -1,7 +1,5 @@
+ FROM debian:9.2
+
+-LABEL maintainer "opsxcq@strm.sh"
+-
+ RUN apt-get update && \
+     apt-get upgrade -y && \
+     DEBIAN_FRONTEND=noninteractive apt-get install -y \
+@@ -20,14 +18,6 @@ RUN apt-get update && \
+     apt-get clean && \
+     rm -rf /var/lib/apt/lists/*
+
+-COPY php.ini /etc/php5/apache2/php.ini
+-COPY dvwa /var/www/html
+-
+-COPY config.inc.php /var/www/html/config/
+-
+-RUN chown www-data:www-data -R /var/www/html && \
+-    rm /var/www/html/index.html
+-
+ RUN service mysql start && \
+     sleep 3 && \
+     mysql -uroot -pvulnerables -e "CREATE USER app@localhost IDENTIFIED BY 'vulnerables';CREATE DATABASE dvwa;GRANT ALL privileges ON dvwa.* TO 'app'@localhost;"
+@@ -36,3 +26,4 @@ EXPOSE 80
+
+ COPY main.sh /
+ ENTRYPOINT ["/main.sh"]
++
+diff --git a/db/main.sh b/db/main.sh
+new file mode 100755
+index 0000000..a8f3893
+--- /dev/null
++++ b/db/main.sh
+@@ -0,0 +1,15 @@
++#!/bin/bash
++
++chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
++
++echo '[+] Starting mysql...'
++service mysql start
++
++# echo '[+] Starting apache'
++# service apache2 start
++
++while true
++do
++    tail -f /var/log/apache2/*.log
++    exit 0
++done
+diff --git a/docker-compose.yml b/docker-compose.yml
+new file mode 100644
+index 0000000..a29d9be
+--- /dev/null
++++ b/docker-compose.yml
+@@ -0,0 +1,25 @@
++version: '2'
++services:
++  mariadb:
++        image: mysql:8.0
++        container_name: mysqldb
++        command: --default-authentication-plugin=mysql_native_password
++        # build:
++        #   context: ./db/
++        volumes:
++          - ./db:/application
++        restart: always
++        environment:
++          - MYSQL_ROOT_PASSWORD=vulnerables
++          - MYSQL_DATABASE=dvwa
++          - MYSQL_USER=app
++          - MYSQL_PASSWORD=vulnerables
++        ports:
++          - "5432:3306"
++  website:
++    container_name: dvwa 
++    build:
++      context: ./dvwa/
++    ports:
++      - 8000:80
++
+diff --git a/dvwa/config.inc.php b/dvwa/config.inc.php
+new file mode 100644
+index 0000000..4d2d126
+--- /dev/null
++++ b/dvwa/config.inc.php
+@@ -0,0 +1,47 @@
++<?php^M
++^M
++# If you are having problems connecting to the MySQL database and all of the variables below are correct^M
++# try changing the 'db_server' variable from localhost to 127.0.0.1. Fixes a problem due to sockets.^M
++#   Thanks to @digininja for the fix.^M
++^M
++# Database management system to use^M
++$DBMS = 'MySQL';^M
++#$DBMS = 'PGSQL'; // Currently disabled^M
++^M
++# Database variables^M
++#   WARNING: The database specified under db_database WILL BE ENTIRELY DELETED during setup.^M
++#   Please use a database dedicated to DVWA.^M
++#^M
++# If you are using MariaDB then you cannot use root, you must use create a dedicated DVWA user.^M
++#   See README.md for more information on this.^M
++$_DVWA = array();^M
++$_DVWA[ 'db_server' ]   = '172.18.0.2';^M
++$_DVWA[ 'db_database' ] = 'dvwa';^M
++$_DVWA[ 'db_user' ]     = 'app';^M
++$_DVWA[ 'db_password' ] = 'vulnerables';^M
++^M
++# Only used with PostgreSQL/PGSQL database selection.^M
++$_DVWA[ 'db_port '] = '5432';^M
++^M
++# ReCAPTCHA settings^M
++#   Used for the 'Insecure CAPTCHA' module^M
++#   You'll need to generate your own keys at: https://www.google.com/recaptcha/admin/create^M
++$_DVWA[ 'recaptcha_public_key' ]  = '';^M
++$_DVWA[ 'recaptcha_private_key' ] = '';^M
++^M
++# Default security level^M
++#   Default value for the secuirty level with each session.^M
++#   The default is 'impossible'. You may wish to set this to either 'low', 'medium', 'high' or impossible'.^M
++$_DVWA[ 'default_security_level' ] = 'low';^M
++^M
++# Default PHPIDS status^M
++#   PHPIDS status with each session.^M
++#   The default is 'disabled'. You can set this to be either 'enabled' or 'disabled'.^M
++$_DVWA[ 'default_phpids_level' ] = 'disabled';^M
++^M
++# Verbose PHPIDS messages^M
++#   Enabling this will show why the WAF blocked the request on the blocked request.^M
++#   The default is 'disabled'. You can set this to be either 'true' or 'false'.^M
++$_DVWA[ 'default_phpids_verbose' ] = 'false';^M
++^M
++?>^M
+diff --git a/dvwa/main.sh b/dvwa/main.sh
+new file mode 100755
+index 0000000..bf6092d
+--- /dev/null
++++ b/dvwa/main.sh
+@@ -0,0 +1,15 @@
++#!/bin/bash
++
++# chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
++
++# echo '[+] Starting mysql...'
++# service mysql start
++
++echo '[+] Starting apache'
++service apache2 start
++
++while true
++do
++    tail -f /var/log/apache2/*.log
++    exit 0
++done
+diff --git a/php.ini b/dvwa/php_dvwa.ini
+similarity index 100%
+rename from php.ini
+rename to dvwa/php_dvwa.ini
+diff --git a/mysql.yaml b/mysql.yaml
+new file mode 100644
+index 0000000..568b572
+--- /dev/null
++++ b/mysql.yaml
+@@ -0,0 +1,33 @@
++apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
++kind: Deployment
++metadata:
++  name: mysql
++spec:
++  selector:
++    matchLabels:
++      app: mysql8
++  strategy:
++    type: Recreate
++  template:
++    metadata:
++      labels:
++        app: mysql8
++    spec:
++      containers:
++      - image: mysql:8.0
++        name: mysql
++        imagePullPolicy: IfNotPresent
++        env:
++        - name: MYSQL_ROOT_PASSWORD
++          value: vulnerables
++        - name: MYSQL_DATABASE
++          value: dvwa
++        - name: MYSQL_USER
++          value: app
++        - name: MYSQL_PASSWORD
++          value: vulnerables
++        args: ["--default-authentication-plugin=mysql_native_password"]
++        ports:
++        - containerPort: 3306
++          name: mysql8
++
+diff --git a/webserver.yaml b/webserver.yaml
+new file mode 100644
+index 0000000..a67a282
+--- /dev/null
++++ b/webserver.yaml
+@@ -0,0 +1,27 @@
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: webserver
++  labels:
++    app: apache
++spec:
++  replicas: 1
++  selector:
++    matchLabels:
++      app: apache
++  template:
++    metadata:
++      labels:
++        app: apache
++    spec:
++      containers:
++      - name: php-apache
++        image: localhost:32000/docker-vulnerable-dvwa_website:k8s
++        resources:
++          limits:
++            memory: "128Mi"
++            cpu: "200m"
++        imagePullPolicy: Always
++        ports:
++        - containerPort: 80
++

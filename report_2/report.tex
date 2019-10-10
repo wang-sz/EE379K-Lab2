@@ -155,8 +155,51 @@ to set this up are as follows:
   \caption{\label{fig:kube_dash}
   Dashboard view of kube-system namespace visible to kube-sa}
 \end{figure}
+\subsection*{3b - Creating a Kubernetes cluster for DVWA}
+For this part, the Dockerfile for the Damn Vulnerable Web App was to be split into two, one for the
+database and one for the web-app. The split Dockerfile and main.sh can be seen in \verb|part3/db/|
+and \verb|part3/dvwa/|. Then, after the images are built, they needed to be deployed to Kubernetes.
+After creating \verb|part3/mysql.yaml| and \verb|part3/webserver.yaml| by modifying the contents of
+the corresponding files from the \verb|simplePhpSQL| project. The commands used to do this are:
+\begin{minted}{bash}
+  $ docker tag docker-vulnerable-dvwa_website:latest localhost:32000/docker-vulnerable-dvwa_website:k8s
+  $ docker push localhost:32000/docker-vulnerable-dvwa_website:k8s
+  $ docker apply -f mysql.yaml
+  $ docker apply -f webserver.yaml
+\end{minted}
+Then, the pods can be seen in Figure~\ref{fig:split} with the resource consumptions as well.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=1\linewidth]{./split_deploy.png}
+  \caption{\label{fig:split}
+  Pods and resource consumption of webserver after deploying the split DVWA}
+\end{figure}
+One issue is that the webserver could not connect to the database. The following are what
+is believed to occur regarding the forkbomb injection.
 
-
+If the script in \verb|part3/b.php| was injected into the web-app, it would crash the pod hosting
+the web-app since it tries to run the fork bomb. In fact, without setting limits it seems to
+crash the entire VM. This means that the website is not accessible until Kubernetes successfully
+restarts it.\\ 
+The web-app deployment can also be configured to launch multiple instances by changing the 
+\verb|replicas| value in \verb|part3/webserver.yaml| to a number greater than 1 and redeploying it. 
+Then, if the fork bomb
+was run now, the application would have greater resiliency to it. In other words, given that
+resource limitations have been set on the pods, the fork bomb would only take down one of the pods
+while the others are still functional. Traffic is then redirected to the working pods while the
+one that has crashed is terminated and brought up again. As a result, the website is still
+accessible.\\
+One DevOps use case for for Kubernetes is providing resiliency to these kinds of attacks so that
+it becomes much harder to completely take down the service. Having multiple instances also means
+that one pod can be upgraded and deployed without having to take down the whole service. Then the
+pod(s) that haven't been upgraded can be done with little to no downtime. Another usage is that
+having mutliple instances can better balance heavy loads and make full use of the host's resources.
+\section*{Conclusion}
+There were lots of strange issues that were very difficult to troubleshoot, making this lab
+frustrating and time consuming. It provided a good, hands-on way to explore the material,
+but it was difficult to figure out exactly how to divide the DVWA into two images and connect them
+after deploying to Kubernetes. Besides that difficulty with Docker, this lab helped with learning
+more about Kubernetes.
 \bibliography{bibliography}
 \bibliographystyle{ieeetr}
 \end{document}

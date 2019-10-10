@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webserver
+  labels:
+    app: apache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apache
+  template:
+    metadata:
+      labels:
+        app: apache
+    spec:
+      containers:
+      - name: php-apache
+        image: localhost:32000/docker-vulnerable-dvwa_website:k8s
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
